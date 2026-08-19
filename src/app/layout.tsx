@@ -35,7 +35,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
     <html lang="en" data-scroll-behavior="smooth">
       <head>
         <Script
-          src="https://www.googletagmanager.com/gtag/js?id=G-TSDY3BX5EB"
+          src="https://www.googletagmanager.com/gtag/js?id=G-00283S20WG"
           strategy="afterInteractive"
         />
         <Script id="gtag-init" strategy="afterInteractive">
@@ -45,7 +45,7 @@ export default function RootLayout({ children }: Readonly<{ children: React.Reac
               window.dataLayer.push(arguments);
             }
             gtag("js", new Date());
-            gtag("config", "G-TSDY3BX5EB");
+            gtag("config", "G-00283S20WG");
           `}
         </Script>
       </head>
