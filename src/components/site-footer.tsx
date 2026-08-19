@@ -5,6 +5,7 @@ import { ArrowUpRight } from "lucide-react";
 import { usePathname } from "next/navigation";
 import { useHomeContent } from "@/lib/use-home-content";
 import { localeFromPathname } from "@/data/locales";
+import { AdsterraBanner } from "@/components/adsterra-banner";
 
 export function SiteFooter() {
   const localizedContent = useHomeContent();
@@ -12,6 +13,7 @@ export function SiteFooter() {
   const aboutHref = locale === "en" ? "#field-index" : `/${locale}/#field-index`;
   return (
     <footer className="site-footer">
+      <AdsterraBanner />
       <div className="footer-grid page-shell">
         <div className="footer-about">
           <div className="footer-brand">
