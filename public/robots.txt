@@ -1,3 +1,4 @@
 User-agent: *
 Allow: /
-Sitemap: https://ms2guide.site/sitemap.xml
+Sitemap: https://www.ms2guide.site/sitemap.xml
+
