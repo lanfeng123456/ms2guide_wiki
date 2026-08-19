@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Script from "next/script";
 import { Archivo, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { RouteLocaleSync } from "@/components/route-locale-sync";
@@ -32,6 +33,22 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <html lang="en" data-scroll-behavior="smooth">
+      <head>
+        <Script
+          src="https://www.googletagmanager.com/gtag/js?id=G-TSDY3BX5EB"
+          strategy="afterInteractive"
+        />
+        <Script id="gtag-init" strategy="afterInteractive">
+          {`
+            window.dataLayer = window.dataLayer || [];
+            function gtag() {
+              window.dataLayer.push(arguments);
+            }
+            gtag("js", new Date());
+            gtag("config", "G-TSDY3BX5EB");
+          `}
+        </Script>
+      </head>
       <body className={`${archivo.variable} ${cormorant.variable}`}>
         <RouteLocaleSync />
         {children}
