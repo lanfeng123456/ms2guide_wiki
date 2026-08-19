@@ -101,7 +101,7 @@ export const homeContent = {
         title: "Weapons & Upgrades",
         description:
           "Find weapons and sidearms, understand upgrade paths, and assemble loadouts for difficult encounters.",
-        href: "/guides/mortal-shell-ii-guide#weapons",
+        href: "/guides/mortal-shell-ii-guide",
         tag: "Arsenal",
       },
       {
