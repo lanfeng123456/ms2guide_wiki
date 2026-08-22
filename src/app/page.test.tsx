@@ -32,5 +32,6 @@ describe("Mortal Shell II homepage", () => {
       "https://www.youtube.com/watch?v=qHLY7zFhRvg",
     );
     expect(screen.getByText(/independent fan-made guide hub/i)).toBeInTheDocument();
+    expect(screen.getByLabelText("Advertisements")).toBeInTheDocument();
   });
 });

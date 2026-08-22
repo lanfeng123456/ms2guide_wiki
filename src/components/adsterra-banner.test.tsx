@@ -14,6 +14,11 @@ describe("AdsterraBanner", () => {
         ),
       ).toBeInTheDocument();
     });
+    expect(
+      document.querySelector(
+        'script[src="https://pl30941417.effectivecpmnetwork.com/63418b900539f6089a243273d124426c/invoke.js"]',
+      ),
+    ).toBeInTheDocument();
     expect(document.querySelector("#adsterra-wide-options")).toHaveTextContent("2c3fe3a93001bf85947eefe6b471c0f5");
     expect(document.querySelector("script[data-cfasync=\"false\"]")).toHaveAttribute("data-cfasync", "false");
   });
