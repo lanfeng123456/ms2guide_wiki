@@ -45,7 +45,9 @@ export function generateStaticParams() {
 
 export async function generateMetadata({ params }: { params: Promise<{ locale: string }> }): Promise<Metadata> {
   const { locale } = await params;
-  return metadataByLocale[locale] ?? {};
+  return metadataByLocale[locale]
+    ? { ...metadataByLocale[locale], alternates: { canonical: `/${locale}/` } }
+    : {};
 }
 
 export default async function LocalizedHome({ params }: { params: Promise<{ locale: string }> }) {

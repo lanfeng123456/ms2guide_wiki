@@ -21,7 +21,14 @@ export async function generateMetadata({ params }: { params: Promise<{ locale: s
   const { locale, slug } = await params;
   const page = getInnerPage(slug, locale as Locale);
   const suffix = ` | ${localizedSuffix[(locale as Locale) ?? "en"]}`;
-  return page ? { title: `${page.title}${suffix}`, description: page.description, openGraph: { title: `${page.title}${suffix}`, description: page.description, type: "article" } } : {};
+  return page
+    ? {
+        title: `${page.title}${suffix}`,
+        description: page.description,
+        alternates: { canonical: `/${locale}/guides/${slug}` },
+        openGraph: { url: `/${locale}/guides/${slug}`, title: `${page.title}${suffix}`, description: page.description, type: "article" },
+      }
+    : {};
 }
 
 export default async function LocalizedGuidePage({ params }: { params: Promise<{ locale: string; slug: string }> }) {

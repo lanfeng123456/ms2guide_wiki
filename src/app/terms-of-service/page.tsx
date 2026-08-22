@@ -1,4 +1,5 @@
 export const metadata = {
+  alternates: { canonical: "/terms-of-service" },
   title: "Terms of Service | Mortal Shell II Wiki",
   description:
     "Terms of service for using the Mortal Shell II Field Archive, including usage scope, content limits, and contributor guidelines.",

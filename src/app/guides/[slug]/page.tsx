@@ -10,8 +10,16 @@ export function generateStaticParams() {
 }
 
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
-  const page = getInnerPage((await params).slug);
-  return page ? { title: `${page.title} | Mortal Shell II Wiki`, description: page.description } : {};
+  const { slug } = await params;
+  const page = getInnerPage(slug);
+  return page
+    ? {
+        title: `${page.title} | Mortal Shell II Wiki`,
+        description: page.description,
+        alternates: { canonical: `/guides/${slug}` },
+        openGraph: { url: `/guides/${slug}`, title: `${page.title} | Mortal Shell II Wiki`, description: page.description, type: "article" },
+      }
+    : {};
 }
 
 export default async function GuidePage({ params }: { params: Promise<{ slug: string }> }) {

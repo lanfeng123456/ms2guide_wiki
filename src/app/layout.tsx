@@ -3,6 +3,7 @@ import Script from "next/script";
 import { Archivo, Cormorant_Garamond } from "next/font/google";
 import "./globals.css";
 import { RouteLocaleSync } from "@/components/route-locale-sync";
+import { siteConfig } from "@/lib/site-config";
 
 const archivo = Archivo({
   variable: "--font-interface",
@@ -16,6 +17,8 @@ const cormorant = Cormorant_Garamond({
 });
 
 export const metadata: Metadata = {
+  metadataBase: new URL(siteConfig.siteUrl),
+  alternates: { canonical: "/" },
   title: "Mortal Shell 2 Guide — Mortal Shell II Wiki",
   description:
     "Mortal Shell 2 Guide with beginner walkthroughs, Shell builds, boss strategies, weapon upgrades, Tarstone locations, achievements, and fast travel tips for the official launch.",
@@ -23,6 +26,7 @@ export const metadata: Metadata = {
     "mortal shell 2 guide",
   icons: { icon: "/favicon.png" },
   openGraph: {
+    url: siteConfig.siteUrl,
     title: "Mortal Shell 2 Guide — Mortal Shell II Wiki",
     description:
       "Independent field archive for Mortal Shell 2, with Shell overviews, weapons, bosses, Tarstones, achievements, and exploration.",

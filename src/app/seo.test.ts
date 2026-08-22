@@ -1,6 +1,14 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
+
+vi.mock("next/font/google", () => ({
+  Archivo: () => ({ variable: "archivo" }),
+  Cormorant_Garamond: () => ({ variable: "cormorant" }),
+}));
+
 import robots from "./robots";
 import sitemap from "./sitemap";
+import { metadata as rootMetadata } from "./layout";
+import { generateMetadata as generateGuideMetadata } from "./guides/[slug]/page";
 import { innerPageSlugs } from "@/data/inner-pages";
 
 const siteUrl = "https://www.ms2guide.site";
@@ -34,5 +42,16 @@ describe("search engine route output", () => {
       rules: { userAgent: "*", allow: "/" },
       sitemap: `${siteUrl}/sitemap.xml`,
     });
+  });
+
+  it("publishes the canonical origin for metadata and guide pages", async () => {
+    expect(rootMetadata.metadataBase?.toString()).toBe("https://www.ms2guide.site/");
+    expect(rootMetadata.alternates?.canonical).toBe("/");
+
+    const guideMetadata = await generateGuideMetadata({
+      params: Promise.resolve({ slug: "mortal-shell-ii-guide" }),
+    });
+
+    expect(guideMetadata.alternates?.canonical).toBe("/guides/mortal-shell-ii-guide");
   });
 });

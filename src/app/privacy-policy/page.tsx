@@ -1,4 +1,5 @@
 export const metadata = {
+  alternates: { canonical: "/privacy-policy" },
   title: "Privacy Policy | Mortal Shell II Wiki",
   description:
     "Privacy policy for the Mortal Shell II fan guide site, including analytics usage, cookies, and external links used by our community resources.",
