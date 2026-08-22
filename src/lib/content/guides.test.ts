@@ -1,5 +1,7 @@
 import { describe, expect, it } from "vitest";
 
+import { getInnerPage, innerPageSlugs } from "@/data/inner-pages";
+import { locales } from "@/data/locales";
 import { getGuide, getGuideParams, getGuideRecords } from "@/lib/content/guides";
 
 describe("guide content index", () => {
@@ -12,9 +14,14 @@ describe("guide content index", () => {
     );
   });
 
-  it("exposes indexed params and records", () => {
-    expect(getGuideParams()).toEqual([{ slug: "mortal-shell-ii-guide", locale: "en" }]);
-    expect(getGuideRecords()).toHaveLength(1);
-    expect(getGuideRecords()[0]?.record.slug).toBe("mortal-shell-ii-guide");
+  it("indexes every legacy guide in every supported locale", () => {
+    expect(getGuideParams()).toHaveLength(innerPageSlugs.length * locales.length);
+    expect(getGuideRecords()).toHaveLength(innerPageSlugs.length * locales.length);
+
+    for (const locale of locales) {
+      for (const slug of innerPageSlugs) {
+        expect(getGuide(slug, locale)?.record).toMatchObject(getInnerPage(slug, locale)!);
+      }
+    }
   });
 });
