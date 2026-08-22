@@ -1,11 +1,16 @@
-import { readdir, stat } from "node:fs/promises";
+import { readFile, stat } from "node:fs/promises";
+import { serve } from "srvx";
 import net from "node:net";
 import path from "node:path";
 import process from "node:process";
-import { spawn } from "node:child_process";
+import {
+  extractFontAssetPathFromStylesheet,
+  extractFontStylesheetFromHtml,
+  findForbiddenProductionUrls,
+  resolveBuildRuntimePaths,
+  SITE_URL,
+} from "./production-output-check.mjs";
 
-const SITE_URL = "https://www.ms2guide.site";
-const FORBIDDEN_PRODUCTION_ORIGIN = "http://www.ms2guide.site";
 const URLS = [
   "/",
   "/guides/mortal-shell-ii-guide",
@@ -38,7 +43,6 @@ async function findBuildOutput(rootDir) {
     return {
       label: ".vercel/output",
       buildDir: vercelDir,
-      staticDir: path.join(vercelDir, "static"),
     };
   }
 
@@ -46,37 +50,12 @@ async function findBuildOutput(rootDir) {
     return {
       label: ".output",
       buildDir: nitroDir,
-      staticDir: path.join(nitroDir, "public"),
     };
   }
 
   throw new Error(
     "Missing Nitro build output. Expected either .vercel/output/functions/__server.func/index.mjs or .output/server/index.mjs.",
   );
-}
-
-async function walkFiles(rootDir) {
-  const entries = await readdir(rootDir, { withFileTypes: true });
-  const files = [];
-
-  for (const entry of entries) {
-    const entryPath = path.join(rootDir, entry.name);
-    if (entry.isDirectory()) {
-      files.push(...(await walkFiles(entryPath)));
-      continue;
-    }
-
-    if (entry.isFile()) {
-      files.push(entryPath);
-    }
-  }
-
-  return files;
-}
-
-async function findFirstFontAsset(staticDir) {
-  const files = await walkFiles(staticDir);
-  return files.find((filePath) => /\.(woff2?|ttf|otf)$/i.test(filePath));
 }
 
 function decodeHtmlEntities(value) {
@@ -178,31 +157,11 @@ async function reservePort() {
   return port;
 }
 
-function getPreviewCommand(port) {
-  if (process.platform === "win32") {
-    return {
-      command: "cmd.exe",
-      args: ["/d", "/s", "/c", `npx nitro preview --port ${port}`],
-    };
-  }
-
-  return {
-    command: "npx",
-    args: ["nitro", "preview", "--port", String(port)],
-  };
-}
-
-async function waitForPreview(baseUrl, child, logBuffer) {
+async function waitForPreview(baseUrl, logBuffer) {
   const timeoutAt = Date.now() + 30_000;
   const targetUrl = `${baseUrl}/robots.txt`;
 
   while (Date.now() < timeoutAt) {
-    if (child.exitCode !== null) {
-      throw new Error(
-        `Preview server exited before becoming ready.\n${logBuffer.join("\n")}`.trim(),
-      );
-    }
-
     try {
       const response = await fetch(targetUrl, { redirect: "manual" });
       if (response.ok) {
@@ -218,62 +177,61 @@ async function waitForPreview(baseUrl, child, logBuffer) {
   throw new Error(`Timed out waiting for Nitro preview at ${baseUrl}.\n${logBuffer.join("\n")}`.trim());
 }
 
-async function startPreview(rootDir) {
+async function readBuildInfo(buildDir) {
+  const buildInfoPath = path.join(buildDir, "nitro.json");
+  const buildInfoText = await readFile(buildInfoPath, "utf8");
+
+  return JSON.parse(buildInfoText);
+}
+
+async function startPreview(buildOutput) {
   const port = Number(process.env.CHECK_PRODUCTION_PORT) || (await reservePort());
   const baseUrl = `http://127.0.0.1:${port}`;
-  const logBuffer = [];
-  const previewCommand = getPreviewCommand(port);
-  const child = spawn(previewCommand.command, previewCommand.args, {
-    cwd: rootDir,
-    stdio: ["ignore", "pipe", "pipe"],
+  const buildInfo = await readBuildInfo(buildOutput.buildDir);
+  const runtimePaths = resolveBuildRuntimePaths(buildOutput.buildDir, buildInfo);
+  const logBuffer = [
+    `Selected build directory: ${buildOutput.buildDir}`,
+    `Server entry: ${runtimePaths.serverEntry}`,
+    `Static directory: ${runtimePaths.publicDir}`,
+  ];
+  const { loadServerEntry } = await import("srvx/loader");
+  const { serveStatic } = await import("srvx/static");
+  const entry = await loadServerEntry({
+    entry: runtimePaths.serverEntry,
+  });
+  const staticHandler = serveStatic({ dir: runtimePaths.publicDir });
+  const originalFetchHandler = entry.fetch ?? (() => Promise.resolve(new Response("Not Found", { status: 404 })));
+  const fetchHandler = async (req) => {
+    const staticResponse = await staticHandler(req, () => void 0);
+
+    if (staticResponse) {
+      return staticResponse;
+    }
+
+    return originalFetchHandler(req);
+  };
+  const server = serve({
+    fetch(req) {
+      return fetchHandler(req);
+    },
+    gracefulShutdown: false,
+    hostname: "127.0.0.1",
+    port,
   });
 
-  child.stdout.setEncoding("utf8");
-  child.stderr.setEncoding("utf8");
+  if (entry.upgrade) {
+    server.node?.server?.on("upgrade", (req, socket, head) => {
+      entry.upgrade(req, socket, head);
+    });
+  }
 
-  child.stdout.on("data", (chunk) => {
-    logBuffer.push(String(chunk).trim());
-  });
-  child.stderr.on("data", (chunk) => {
-    logBuffer.push(String(chunk).trim());
-  });
-
-  await waitForPreview(baseUrl, child, logBuffer);
+  await waitForPreview(baseUrl, logBuffer);
 
   return {
     baseUrl,
     logBuffer,
     async stop() {
-      if (child.exitCode !== null) {
-        return;
-      }
-
-      if (process.platform === "win32") {
-        const killer = spawn("taskkill.exe", ["/pid", String(child.pid), "/t", "/f"], {
-          stdio: "ignore",
-        });
-
-        await new Promise((resolve) => {
-          killer.once("exit", resolve);
-          killer.once("error", resolve);
-        });
-
-        return;
-      }
-
-      child.kill("SIGTERM");
-      await new Promise((resolve) => {
-        const timeout = setTimeout(() => {
-          if (child.exitCode === null) {
-            child.kill("SIGKILL");
-          }
-        }, 2_000);
-
-        child.once("exit", () => {
-          clearTimeout(timeout);
-          resolve();
-        });
-      });
+      await server.close();
     },
   };
 }
@@ -281,9 +239,13 @@ async function startPreview(rootDir) {
 async function fetchText(baseUrl, routePath) {
   const response = await fetch(`${baseUrl}${routePath}`, { redirect: "manual" });
   const text = await response.text();
+  const forbiddenProductionUrls = findForbiddenProductionUrls(text);
 
   expectCondition(response.ok, `${routePath} returned ${response.status}.`);
-  expectCondition(!text.includes(FORBIDDEN_PRODUCTION_ORIGIN), `${routePath} contains ${FORBIDDEN_PRODUCTION_ORIGIN}.`);
+  expectCondition(
+    forbiddenProductionUrls.length === 0,
+    `${routePath} contains non-canonical production URL(s): ${forbiddenProductionUrls.join(", ")}.`,
+  );
 
   return {
     response,
@@ -339,14 +301,12 @@ async function assertSitemap(baseUrl) {
   expectCondition(contentType.includes("xml"), `sitemap.xml must return XML, received ${contentType || "unknown"}.`);
   expectCondition(locs.length === 90, `sitemap.xml must contain 90 URLs, found ${locs.length}.`);
   expectCondition(locs.every((loc) => loc.startsWith(`${SITE_URL}/`) || loc === SITE_URL), "sitemap.xml must use only HTTPS production URLs.");
-  expectCondition(!locs.some((loc) => loc.startsWith(FORBIDDEN_PRODUCTION_ORIGIN)), `sitemap.xml contains ${FORBIDDEN_PRODUCTION_ORIGIN}.`);
 }
 
-async function assertStylesheetAndFonts(baseUrl, html, staticDir) {
+async function assertStylesheetAndFonts(baseUrl, html) {
   const stylesheetPath = getStylesheetPath(html);
   const stylesheetResponse = await fetch(`${baseUrl}${stylesheetPath}`);
   const stylesheetText = await stylesheetResponse.text();
-  const fontAssetPath = await findFirstFontAsset(staticDir);
 
   expectCondition(stylesheetResponse.ok, `Stylesheet ${stylesheetPath} failed with ${stylesheetResponse.status}.`);
   expectCondition(
@@ -357,16 +317,15 @@ async function assertStylesheetAndFonts(baseUrl, html, staticDir) {
     stylesheetText.includes("--font-interface") && stylesheetText.includes("--font-display"),
     "Stylesheet is missing next/font/google CSS variables.",
   );
-  expectCondition(fontAssetPath, "No built font asset was found in the Nitro output.");
-
-  const publicFontPath = `/${path.relative(staticDir, fontAssetPath).replaceAll(path.sep, "/")}`;
-  const fontResponse = await fetch(`${baseUrl}${publicFontPath}`);
+  const renderedFontStylesheet = extractFontStylesheetFromHtml(html);
+  const fontAssetPath = extractFontAssetPathFromStylesheet(renderedFontStylesheet);
+  const fontResponse = await fetch(`${baseUrl}${fontAssetPath}`);
   const fontContentType = fontResponse.headers.get("content-type") ?? "";
 
-  expectCondition(fontResponse.ok, `Font asset ${publicFontPath} failed with ${fontResponse.status}.`);
+  expectCondition(fontResponse.ok, `Font asset ${fontAssetPath} failed with ${fontResponse.status}.`);
   expectCondition(
     fontContentType.includes("font") || fontContentType.includes("application/octet-stream"),
-    `Font asset ${publicFontPath} returned unexpected content type ${fontContentType || "unknown"}.`,
+    `Font asset ${fontAssetPath} returned unexpected content type ${fontContentType || "unknown"}.`,
   );
 }
 
@@ -383,9 +342,8 @@ async function assertImageOptimizer(baseUrl, html) {
 }
 
 async function main() {
-  const rootDir = process.cwd();
-  const buildOutput = await findBuildOutput(rootDir);
-  const preview = await startPreview(rootDir);
+  const buildOutput = await findBuildOutput(process.cwd());
+  const preview = await startPreview(buildOutput);
 
   try {
     console.log(`Checking production output from ${buildOutput.label} via ${preview.baseUrl}`);
@@ -396,7 +354,7 @@ async function main() {
     await assertRobots(preview.baseUrl);
     await assertSitemap(preview.baseUrl);
     await assertImageOptimizer(preview.baseUrl, homeHtml);
-    await assertStylesheetAndFonts(preview.baseUrl, homeHtml, buildOutput.staticDir);
+    await assertStylesheetAndFonts(preview.baseUrl, homeHtml);
 
     console.log(`PASS ${URLS.join(", ")}`);
     console.log("PASS canonical, og:url, ads, robots, sitemap, next/image, and next/font/google checks");
