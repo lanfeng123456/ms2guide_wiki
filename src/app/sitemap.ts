@@ -1,5 +1,5 @@
 import type { MetadataRoute } from "next";
-import { innerPageSlugs } from "@/data/inner-pages";
+import { getGuideParams } from "@/lib/content/guides";
 import { siteConfig } from "@/lib/site-config";
 
 const publicPaths = [
@@ -7,9 +7,8 @@ const publicPaths = [
   "/de/",
   "/fr/",
   "/pt-br/",
-  ...innerPageSlugs.map((slug) => `/guides/${slug}`),
-  ...["de", "fr", "pt-br"].flatMap((locale) =>
-    innerPageSlugs.map((slug) => `/${locale}/guides/${slug}`)
+  ...getGuideParams().map(({ locale, slug }) =>
+    locale === "en" ? `/guides/${slug}` : `/${locale}/guides/${slug}`,
   ),
   "/privacy-policy",
   "/terms-of-service",
