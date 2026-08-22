@@ -32,7 +32,7 @@ function readString(value: unknown, field: string, sourcePath: string): string {
 }
 
 function readLocale(value: unknown, sourcePath: string): GuideLocale {
-  const locale = readString(value, "locale", sourcePath).toLowerCase();
+  const locale = readString(value, "locale", sourcePath);
   if (!supportedGuideLocales.includes(locale as GuideLocale)) {
     fail(sourcePath, `Unsupported locale: ${locale}`);
   }
@@ -154,7 +154,14 @@ function parseSections(children: UnknownNode[], sourcePath: string): GuideSectio
         fail(sourcePath, `Section "${nodeText(heading).trim()}" has an invalid list item at index ${bulletIndex}`);
       }
 
-      const text = nodeText(item).trim();
+      if (!Array.isArray(item.children) || item.children.length !== 1 || !isParagraph(item.children[0])) {
+        fail(
+          sourcePath,
+          `Section "${nodeText(heading).trim()}" list item at index ${bulletIndex} must contain exactly one paragraph`,
+        );
+      }
+
+      const text = nodeText(item.children[0]).trim();
       if (text.length === 0) {
         fail(sourcePath, `Section "${nodeText(heading).trim()}" has an empty list item at index ${bulletIndex}`);
       }

@@ -1,9 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { parseGuideDocument } from "@/lib/content/parse-guide";
 
-describe("parseGuideDocument", () => {
-  it("parses a full guide document into typed record sections", () => {
-    const source = `---
+const validGuideSource = `---
 slug: verified-details
 locale: en
 status: Verified
@@ -31,7 +29,9 @@ This section is checked.
 - Second detail
 `;
 
-    const result = parseGuideDocument(source, "src/content/guides/en/example.mdx");
+describe("parseGuideDocument", () => {
+  it("parses a full guide document into typed record sections", () => {
+    const result = parseGuideDocument(validGuideSource, "src/content/guides/en/example.mdx");
 
     expect(result.sourcePath).toBe("src/content/guides/en/example.mdx");
     expect(result.body).toContain("Guide introduction paragraph.");
@@ -46,6 +46,12 @@ This section is checked.
 
   it("rejects guide frontmatter when required fields are missing", () => {
     expect(() => parseGuideDocument("---\ntitle: incomplete\n---", "broken.mdx")).toThrow(/slug|locale|status/i);
+  });
+
+  it("rejects locale values that do not exactly match a supported locale", () => {
+    const source = validGuideSource.replace("locale: en", "locale: EN");
+
+    expect(() => parseGuideDocument(source, "src/content/guides/EN/example.mdx")).toThrow(/locale/i);
   });
 
   it("rejects invalid section structure with the source path in the error", () => {
@@ -79,6 +85,17 @@ Second detail
 
     expect(() => parseGuideDocument(source, "src/content/guides/en/broken-sections.mdx")).toThrow(
       /src\/content\/guides\/en\/broken-sections\.mdx/i,
+    );
+  });
+
+  it.each([
+    ["a nested list", "- First detail\n  - Nested detail"],
+    ["multiple paragraphs", "- First paragraph.\n\n  Second paragraph."],
+  ])("rejects list items containing %s", (_case, listItem) => {
+    const source = validGuideSource.replace("- First detail\n- Second detail", listItem);
+
+    expect(() => parseGuideDocument(source, "src/content/guides/en/invalid-list-item.mdx")).toThrow(
+      /src\/content\/guides\/en\/invalid-list-item\.mdx/i,
     );
   });
 
