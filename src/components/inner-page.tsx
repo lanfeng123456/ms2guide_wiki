@@ -1,7 +1,8 @@
 import Link from "next/link";
 import { ArrowLeft, ArrowUpRight, BookOpen, CircleAlert, ExternalLink } from "lucide-react";
-import { getInnerPage, type InnerPageRecord } from "@/data/inner-pages";
+import type { InnerPageRecord } from "@/data/inner-pages";
 import type { Locale } from "@/data/locales";
+import { getGuide } from "@/lib/content/guides";
 
 function statusClass(status: InnerPageRecord["status"]) {
   return status === "Verified" ? "status-verified" : status === "Beta evidence" ? "status-beta" : "status-watch";
@@ -113,7 +114,7 @@ export function InnerPage({ page, locale = "en" }: { page: InnerPageRecord; loca
         day: "numeric",
       }).format(parsedDate);
   const relatedLinks = page.related.map((slug) => {
-    const localizedRelated = locale === "en" ? undefined : getInnerPage(slug, locale);
+    const localizedRelated = locale === "en" ? undefined : getGuide(slug, locale)?.record;
     const fallbackLabel = slug.replace("mortal-shell-ii-", "").replaceAll("-", " ");
     const linkedTitle = localizedRelated?.title ? localizedRelated.title.replace(/^Mortal Shell II\s+/i, "") : undefined;
     return {

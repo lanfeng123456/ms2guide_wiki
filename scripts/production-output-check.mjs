@@ -87,3 +87,64 @@ export function extractFontStylesheetFromHtml(html) {
 
   return match[1];
 }
+
+export function assertAbsoluteSiteUrl(value, label, expectedPath) {
+  let url;
+
+  try {
+    url = new URL(value);
+  } catch {
+    throw new Error(`${label} must be an absolute URL. Received ${value}.`);
+  }
+
+  if (url.protocol !== "https:") {
+    throw new Error(`${label} must use HTTPS. Received ${value}.`);
+  }
+
+  if (url.host !== "www.ms2guide.site") {
+    throw new Error(`${label} must use www.ms2guide.site. Received ${value}.`);
+  }
+
+  const expectedUrl = new URL(expectedPath, SITE_URL);
+  const actualPath = url.pathname === "/" ? "/" : url.pathname.replace(/\/$/, "");
+  const expectedNormalizedPath = expectedUrl.pathname === "/"
+    ? "/"
+    : expectedUrl.pathname.replace(/\/$/, "");
+
+  if (actualPath !== expectedNormalizedPath) {
+    throw new Error(
+      `${label} path mismatch. Expected ${expectedPath}, received ${url.pathname}.`,
+    );
+  }
+}
+
+export function fetchWithTimeout(
+  fetchImplementation,
+  input,
+  init = {},
+  timeoutMs = 10_000,
+) {
+  const timeoutSignal = AbortSignal.timeout(timeoutMs);
+  const signal = init.signal
+    ? AbortSignal.any([init.signal, timeoutSignal])
+    : timeoutSignal;
+
+  return fetchImplementation(input, { ...init, signal });
+}
+
+export async function waitForPreviewWithCleanup(waitUntilReady, stopPreview) {
+  try {
+    await waitUntilReady();
+  } catch (error) {
+    await stopPreview();
+    throw error;
+  }
+}
+
+export function resolveStaticMiddleware(staticModule) {
+  if (typeof staticModule?.staticMiddleware !== "function") {
+    throw new Error("srvx/static is missing the staticMiddleware export.");
+  }
+
+  return staticModule.staticMiddleware;
+}

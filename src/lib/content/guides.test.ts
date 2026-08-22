@@ -2,7 +2,52 @@ import { describe, expect, it } from "vitest";
 
 import { getInnerPage, innerPageSlugs } from "@/data/inner-pages";
 import { locales } from "@/data/locales";
-import { getGuide, getGuideParams, getGuideRecords } from "@/lib/content/guides";
+import {
+  createGuideIndexFromSources,
+  getGuide,
+  getGuideParams,
+  getGuideRecords,
+} from "@/lib/content/guides";
+
+function createGuideSource({
+  slug,
+  locale = "en",
+  sourceHref = "https://example.com/official",
+  related = [],
+}: {
+  slug: string;
+  locale?: "en" | "de";
+  sourceHref?: string;
+  related?: string[];
+}) {
+  const relatedYaml = related.length > 0
+    ? `\n${related.map((relatedSlug) => `  - ${relatedSlug}`).join("\n")}`
+    : " []";
+
+  return `---
+slug: ${slug}
+locale: ${locale}
+status: Verified
+keyword: Mortal Shell II ${slug}
+title: Mortal Shell II ${slug}
+description: Test guide for ${slug}.
+eyebrow: Mortal Shell II Field Guide
+checked: Checked Aug 22, 2026
+quickAnswer: Test answer.
+updateWatch: Test update watch.
+sources:
+  - label: Official website
+    href: ${sourceHref}
+related:${relatedYaml}
+---
+
+## Test section
+
+Test introduction.
+
+- Test detail
+`;
+}
 
 describe("guide content index", () => {
   it("loads the English guide fixture by locale and slug", () => {
@@ -23,5 +68,31 @@ describe("guide content index", () => {
         expect(getGuide(slug, locale)?.record).toMatchObject(getInnerPage(slug, locale)!);
       }
     }
+  });
+
+  it("rejects source links that are not absolute HTTP or HTTPS URLs", () => {
+    expect(() =>
+      createGuideIndexFromSources({
+        "src/content/guides/en/invalid-source.mdx": createGuideSource({
+          slug: "invalid-source",
+          sourceHref: "javascript:alert(1)",
+        }),
+      }),
+    ).toThrow(/source.*http|http.*source/i);
+  });
+
+  it("rejects related slugs that do not exist in the same locale", () => {
+    expect(() =>
+      createGuideIndexFromSources({
+        "src/content/guides/en/source-guide.mdx": createGuideSource({
+          slug: "source-guide",
+          related: ["target-guide"],
+        }),
+        "src/content/guides/de/target-guide.mdx": createGuideSource({
+          slug: "target-guide",
+          locale: "de",
+        }),
+      }),
+    ).toThrow(/en:target-guide|same locale/i);
   });
 });

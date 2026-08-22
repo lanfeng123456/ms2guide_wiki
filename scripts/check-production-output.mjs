@@ -4,11 +4,15 @@ import net from "node:net";
 import path from "node:path";
 import process from "node:process";
 import {
+  assertAbsoluteSiteUrl,
   extractFontAssetPathFromStylesheet,
   extractFontStylesheetFromHtml,
+  fetchWithTimeout,
   findForbiddenProductionUrls,
+  resolveStaticMiddleware,
   resolveBuildRuntimePaths,
   SITE_URL,
+  waitForPreviewWithCleanup,
 } from "./production-output-check.mjs";
 
 const URLS = [
@@ -23,6 +27,8 @@ const AD_MARKERS = [
   "https://www.highperformanceformat.com/2c3fe3a93001bf85947eefe6b471c0f5/invoke.js",
   "https://pl30941417.effectivecpmnetwork.com/63418b900539f6089a243273d124426c/invoke.js",
 ];
+const REQUEST_TIMEOUT_MS = 10_000;
+const READINESS_REQUEST_TIMEOUT_MS = 2_000;
 
 async function exists(targetPath) {
   try {
@@ -63,16 +69,6 @@ function decodeHtmlEntities(value) {
     .replaceAll("&amp;", "&")
     .replaceAll("&quot;", "\"")
     .replaceAll("&#39;", "'");
-}
-
-function normalizeExpectedPath(routePath) {
-  const url = new URL(routePath, SITE_URL);
-  return url.pathname === "/" ? "/" : url.pathname.replace(/\/$/, "");
-}
-
-function normalizeActualPath(value) {
-  const url = new URL(value, SITE_URL);
-  return url.pathname === "/" ? "/" : url.pathname.replace(/\/$/, "");
 }
 
 function expectCondition(condition, message) {
@@ -163,7 +159,12 @@ async function waitForPreview(baseUrl, logBuffer) {
 
   while (Date.now() < timeoutAt) {
     try {
-      const response = await fetch(targetUrl, { redirect: "manual" });
+      const response = await fetchWithTimeout(
+        fetch,
+        targetUrl,
+        { redirect: "manual" },
+        READINESS_REQUEST_TIMEOUT_MS,
+      );
       if (response.ok) {
         return;
       }
@@ -195,11 +196,11 @@ async function startPreview(buildOutput) {
     `Static directory: ${runtimePaths.publicDir}`,
   ];
   const { loadServerEntry } = await import("srvx/loader");
-  const { serveStatic } = await import("srvx/static");
+  const staticModule = await import("srvx/static");
   const entry = await loadServerEntry({
     entry: runtimePaths.serverEntry,
   });
-  const staticHandler = serveStatic({ dir: runtimePaths.publicDir });
+  const staticHandler = resolveStaticMiddleware(staticModule)({ dir: runtimePaths.publicDir });
   const originalFetchHandler = entry.fetch ?? (() => Promise.resolve(new Response("Not Found", { status: 404 })));
   const fetchHandler = async (req) => {
     const staticResponse = await staticHandler(req, () => void 0);
@@ -219,13 +220,18 @@ async function startPreview(buildOutput) {
     port,
   });
 
-  if (entry.upgrade) {
-    server.node?.server?.on("upgrade", (req, socket, head) => {
-      entry.upgrade(req, socket, head);
-    });
-  }
+  await waitForPreviewWithCleanup(
+    async () => {
+      if (entry.upgrade) {
+        server.node?.server?.on("upgrade", (req, socket, head) => {
+          entry.upgrade(req, socket, head);
+        });
+      }
 
-  await waitForPreview(baseUrl, logBuffer);
+      await waitForPreview(baseUrl, logBuffer);
+    },
+    () => server.close(),
+  );
 
   return {
     baseUrl,
@@ -237,7 +243,12 @@ async function startPreview(buildOutput) {
 }
 
 async function fetchText(baseUrl, routePath) {
-  const response = await fetch(`${baseUrl}${routePath}`, { redirect: "manual" });
+  const response = await fetchWithTimeout(
+    fetch,
+    `${baseUrl}${routePath}`,
+    { redirect: "manual" },
+    REQUEST_TIMEOUT_MS,
+  );
   const text = await response.text();
   const forbiddenProductionUrls = findForbiddenProductionUrls(text);
 
@@ -251,16 +262,6 @@ async function fetchText(baseUrl, routePath) {
     response,
     text,
   };
-}
-
-function assertAbsoluteSiteUrl(value, label, expectedPath) {
-  const url = new URL(value, SITE_URL);
-  expectCondition(url.protocol === "https:", `${label} must use HTTPS. Received ${value}.`);
-  expectCondition(url.host === "www.ms2guide.site", `${label} must use www.ms2guide.site. Received ${value}.`);
-  expectCondition(
-    normalizeActualPath(url.toString()) === normalizeExpectedPath(expectedPath),
-    `${label} path mismatch. Expected ${expectedPath}, received ${url.pathname}.`,
-  );
 }
 
 async function assertHtmlPage(baseUrl, routePath) {
@@ -305,7 +306,12 @@ async function assertSitemap(baseUrl) {
 
 async function assertStylesheetAndFonts(baseUrl, html) {
   const stylesheetPath = getStylesheetPath(html);
-  const stylesheetResponse = await fetch(`${baseUrl}${stylesheetPath}`);
+  const stylesheetResponse = await fetchWithTimeout(
+    fetch,
+    `${baseUrl}${stylesheetPath}`,
+    {},
+    REQUEST_TIMEOUT_MS,
+  );
   const stylesheetText = await stylesheetResponse.text();
 
   expectCondition(stylesheetResponse.ok, `Stylesheet ${stylesheetPath} failed with ${stylesheetResponse.status}.`);
@@ -319,7 +325,12 @@ async function assertStylesheetAndFonts(baseUrl, html) {
   );
   const renderedFontStylesheet = extractFontStylesheetFromHtml(html);
   const fontAssetPath = extractFontAssetPathFromStylesheet(renderedFontStylesheet);
-  const fontResponse = await fetch(`${baseUrl}${fontAssetPath}`);
+  const fontResponse = await fetchWithTimeout(
+    fetch,
+    `${baseUrl}${fontAssetPath}`,
+    {},
+    REQUEST_TIMEOUT_MS,
+  );
   const fontContentType = fontResponse.headers.get("content-type") ?? "";
 
   expectCondition(fontResponse.ok, `Font asset ${fontAssetPath} failed with ${fontResponse.status}.`);
@@ -331,7 +342,12 @@ async function assertStylesheetAndFonts(baseUrl, html) {
 
 async function assertImageOptimizer(baseUrl, html) {
   const imagePath = getImageOptimizerPath(html);
-  const imageResponse = await fetch(`${baseUrl}${imagePath}`);
+  const imageResponse = await fetchWithTimeout(
+    fetch,
+    `${baseUrl}${imagePath}`,
+    {},
+    REQUEST_TIMEOUT_MS,
+  );
   const imageContentType = imageResponse.headers.get("content-type") ?? "";
 
   expectCondition(imageResponse.ok, `next/image asset ${imagePath} failed with ${imageResponse.status}.`);

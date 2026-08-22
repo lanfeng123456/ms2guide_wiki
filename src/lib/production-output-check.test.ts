@@ -5,11 +5,20 @@ import path from "node:path";
 import { describe, expect, it } from "vitest";
 
 import {
+  assertAbsoluteSiteUrl,
   extractFontAssetPathFromStylesheet,
   extractFontStylesheetFromHtml,
+  fetchWithTimeout,
   findForbiddenProductionUrls,
+  resolveStaticMiddleware,
   resolveBuildRuntimePaths,
+  waitForPreviewWithCleanup,
 } from "../../scripts/production-output-check.mjs";
+
+type FetchLike = (
+  input: string | URL | Request,
+  init?: RequestInit,
+) => Promise<Response>;
 
 describe("production output checker helpers", () => {
   it("resolves runtime paths from the selected build artifact", () => {
@@ -83,5 +92,64 @@ describe("production output checker helpers", () => {
     expect(extractFontStylesheetFromHtml(html)).toContain(
       "/_next/static/_vinext_fonts/archivo/font.woff2",
     );
+  });
+
+  it("rejects relative canonical and Open Graph metadata URLs", () => {
+    expect(() =>
+      assertAbsoluteSiteUrl(
+        "https://www.ms2guide.site/guides/mortal-shell-ii-guide",
+        "canonical",
+        "/guides/mortal-shell-ii-guide",
+      ),
+    ).not.toThrow();
+
+    expect(() =>
+      assertAbsoluteSiteUrl(
+        "/guides/mortal-shell-ii-guide",
+        "canonical",
+        "/guides/mortal-shell-ii-guide",
+      ),
+    ).toThrow(/must be an absolute URL/i);
+  });
+
+  it("aborts a network request after the configured deadline", async () => {
+    const hangingFetch: FetchLike = (_input, init) =>
+      new Promise((_resolve, reject) => {
+        init?.signal?.addEventListener("abort", () => reject(init.signal?.reason));
+      });
+
+    await expect(
+      fetchWithTimeout(
+        hangingFetch,
+        "http://127.0.0.1:3000/robots.txt",
+        {},
+        10,
+      ),
+    ).rejects.toMatchObject({ name: "TimeoutError" });
+  });
+
+  it("closes the preview server when readiness fails", async () => {
+    let stopCount = 0;
+
+    await expect(
+      waitForPreviewWithCleanup(
+        async () => {
+          throw new Error("readiness failed");
+        },
+        async () => {
+          stopCount += 1;
+        },
+      ),
+    ).rejects.toThrow("readiness failed");
+
+    expect(stopCount).toBe(1);
+  });
+
+  it("selects the static middleware exported by the direct srvx dependency", () => {
+    const staticMiddleware = (_options: { dir: string }) => "static-handler";
+
+    expect(
+      resolveStaticMiddleware({ staticMiddleware }),
+    ).toBe(staticMiddleware);
   });
 });

@@ -26,10 +26,38 @@ describe("vite build configuration", () => {
       Array.isArray(plugin) ? plugin : [plugin],
     );
     const pluginNames = plugins
-      .map((plugin) => plugin?.name)
-      .filter((name): name is string => typeof name === "string");
+      .flatMap((plugin) =>
+        plugin && typeof plugin === "object" && "name" in plugin && typeof plugin.name === "string"
+          ? [plugin.name]
+          : [],
+      );
 
     expect(pluginNames.some((name) => name.includes("vinext"))).toBe(true);
     expect(pluginNames.some((name) => name.includes("nitro"))).toBe(true);
+  });
+
+  it("runs semantic TypeScript checking before both production builds", async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as {
+      scripts?: Record<string, string>;
+    };
+
+    expect(packageJson.scripts?.typecheck).toBe("tsc --noEmit --incremental false");
+    expect(packageJson.scripts?.build).toMatch(/^npm run typecheck && /);
+    expect(packageJson.scripts?.["build:vercel"]).toMatch(/^npm run typecheck && /);
+  });
+
+  it("declares srvx directly because the production checker imports it", async () => {
+    const packageJson = JSON.parse(
+      await readFile(path.join(process.cwd(), "package.json"), "utf8"),
+    ) as {
+      dependencies?: Record<string, string>;
+      devDependencies?: Record<string, string>;
+    };
+
+    expect(
+      packageJson.dependencies?.srvx ?? packageJson.devDependencies?.srvx,
+    ).toBeTruthy();
   });
 });
