@@ -21,9 +21,9 @@ describe("search engine route output", () => {
     );
     const expectedPaths = [
       "/",
-      "/de/",
-      "/fr/",
-      "/pt-br/",
+      "/de",
+      "/fr",
+      "/pt-br",
       ...guidePaths,
       "/privacy-policy",
       "/terms-of-service",

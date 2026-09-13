@@ -4,9 +4,9 @@ import { siteConfig } from "@/lib/site-config";
 
 const publicPaths = [
   "/",
-  "/de/",
-  "/fr/",
-  "/pt-br/",
+  "/de",
+  "/fr",
+  "/pt-br",
   ...getGuideParams().map(({ locale, slug }) =>
     locale === "en" ? `/guides/${slug}` : `/${locale}/guides/${slug}`,
   ),
